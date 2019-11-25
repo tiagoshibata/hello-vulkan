@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -85,13 +86,31 @@ private:
     const bool enableValidationLayers = true;
 #endif
 
+    void glfwFail() {
+        const char *errorMessage;
+        if (int status = glfwGetError(&errorMessage); status) {
+            std::ios_base::fmtflags flags(std::cerr.flags());
+            std::cerr << "GLFW error: 0x" << std::hex << status << "\n";
+            std::cerr.flags(flags);
+            if (errorMessage)
+                std::cerr << errorMessage << "\n";
+            throw std::runtime_error("GLFW failure");
+
+        }
+    }
+
     void initWindow() {
-        glfwInit();
+        if (!glfwInit())
+            glfwFail();
+
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+        if (!window) {
+            glfwFail();
+        }
     }
 
     bool checkValidationLayerSupport() {
@@ -167,17 +186,13 @@ private:
             .engineVersion = VK_MAKE_VERSION(1, 0, 0),
             .apiVersion = VK_API_VERSION_1_0,
         };
-        uint32_t glfwExtensionCount = 0;
-        const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+        auto requiredExtensions = getRequiredExtensions();
         VkInstanceCreateInfo createInfo = {
             .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
             .pApplicationInfo = &appInfo,
-            .enabledExtensionCount = glfwExtensionCount,
-            .ppEnabledExtensionNames = glfwExtensions,
+            .enabledExtensionCount = static_cast<uint32_t>(requiredExtensions.size()),
+            .ppEnabledExtensionNames = requiredExtensions.data(),
         };
-        auto requiredExtensions = getRequiredExtensions();
-        createInfo.enabledExtensionCount = static_cast<uint32_t>(requiredExtensions.size());
-        createInfo.ppEnabledExtensionNames = requiredExtensions.data();
         if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
             throw std::runtime_error("failed to create instance!");
         }
