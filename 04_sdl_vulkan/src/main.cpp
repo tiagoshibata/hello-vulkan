@@ -1,6 +1,3 @@
-#include <SDL2/SDL.h>
-#include <vulkan/vulkan.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
@@ -12,20 +9,99 @@
 #include <set>
 #include <vector>
 
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_vulkan.h>
+#include <vulkan/vulkan.h>
+
 const int WIDTH = 800;
 const int HEIGHT = 600;
 
-static std::vector<char> readFile(const std::string& filename) {
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-    if (!file.is_open()) {
-        throw std::runtime_error("failed to open file!");
+class SDLWindow {
+public:
+    void create() {
+        assert(!window);
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
+            sdl_fail();
+
+        window = SDL_CreateWindow("Vulkan", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, SDL_WINDOW_VULKAN | SDL_WINDOW_ALLOW_HIGHDPI);
+        if (!window) {
+            sdl_fail();
+        }
     }
-    size_t fileSize = (size_t) file.tellg();
-    std::vector<char> buffer(fileSize);
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);file.close();
-    return buffer;
+
+    std::vector<const char*> get_vulkan_extensions() {
+        unsigned int count;
+        if (!SDL_Vulkan_GetInstanceExtensions(window, &count, nullptr))
+            sdl_fail();
+
+        std::vector<const char*> extensions(count);
+        if (!SDL_Vulkan_GetInstanceExtensions(window, &count, extensions.data()))
+            sdl_fail();
+        return extensions;
+    }
+
+    void create_vulkan_surface(const VkInstance& instance, VkSurfaceKHR& surface) {
+        if (!SDL_Vulkan_CreateSurface(window, instance, &surface))
+            sdl_fail();
+    }
+
+    std::pair<int, int> get_drawable_size() {
+        int width, height;
+        SDL_Vulkan_GetDrawableSize(window, &width, &height);
+        return {width, height};
+    }
+
+    void main_loop() {
+        for (;;) {
+            SDL_Event event;
+            while (SDL_WaitEvent(&event)) {
+                switch (event.type) {
+                case SDL_QUIT:
+                    return;
+                }
+            }
+            sdl_fail();
+        }
+    }
+
+    ~SDLWindow() {
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+    }
+
+private:
+    SDL_Window* window = nullptr;
+
+    void sdl_fail() {
+        throw std::runtime_error(std::string("SDL: ") + SDL_GetError());
+    }
+};
+
+class App {
+public:
+    void run() {
+        SDLWindow window;
+        window.create();
+        window.main_loop();
+    }
+};
+
+int main(int argc, char **argv) {
+    App app;
+    try {
+        app.run();
+    } catch (const std::runtime_error& e) {
+        std::cerr << "Exception: " << e.what() << std::endl;
+        throw;
+    } catch (...) {
+        throw;
+    }
+
+    return 0;
 }
+
+
+
 
 struct QueueFamilyIndices {
     int graphicsFamily = -1;
@@ -73,73 +149,9 @@ private:
     std::vector<VkCommandBuffer> commandBuffers;
     VkSemaphore imageAvailableSemaphore;
     VkSemaphore renderFinishedSemaphore;
-    const std::vector<const char*> validationLayers = {
-        "VK_LAYER_LUNARG_standard_validation"
-    };
     const std::vector<const char*> deviceExtensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
-
-#ifdef NDEBUG
-    const bool enableValidationLayers = false;
-#else
-    const bool enableValidationLayers = true;
-#endif
-
-    void sdlFail() {
-        const char *errorMessage = SDL_GetError();
-        std::cerr << "SDL failed";
-        if (errorMessage[0])
-            std::cerr << ": " << errorMessage;
-        std::cerr << "\n";
-        throw std::runtime_error("SDL failed");
-    }
-
-    void initWindow() {
-        if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
-            sdlFail();
-
-        window = SDL_CreateWindow("Vulkan", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, 0);
-        if (!window) {
-            sdlFail();
-        }
-    }
-
-    bool checkValidationLayerSupport() {
-        uint32_t layerCount;
-        vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-
-        std::vector<VkLayerProperties> availableLayers(layerCount);
-        vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
-
-        for (const char* layerName : validationLayers) {
-            bool layerFound = false;
-            for (const auto& layerProperties : availableLayers) {
-                if (strcmp(layerName, layerProperties.layerName) == 0) {
-                    layerFound = true;
-                    break;
-                }
-            }
-            if (!layerFound) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    std::vector<const char*> getRequiredExtensions() {
-        uint32_t glfwExtensionCount = 0;
-        const char** glfwExtensions;
-        glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-
-        if (enableValidationLayers) {
-            extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-        }
-
-        return extensions;
-    }
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
         VkDebugReportFlagsEXT flags,
@@ -549,12 +561,6 @@ private:
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
     }
 
-    void createSurface() {
-        if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create window surface!");
-        }
-    }
-
     void createLogicalDevice() {
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
@@ -579,7 +585,7 @@ private:
         createInfo.ppEnabledExtensionNames = deviceExtensions.data();
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
-        if (enableValidationLayers) {
+        if (false /* enableValidationLayers */) {
             createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
             createInfo.ppEnabledLayerNames = validationLayers.data();
         } else {
@@ -720,39 +726,11 @@ private:
         return indices;
     }
 
-    void setupDebugCallback() {
-        if (!enableValidationLayers)
-            return;
-        VkDebugReportCallbackCreateInfoEXT createInfo = {};
-        createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-        createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
-        createInfo.pfnCallback = debugCallback;
-        if (CreateDebugReportCallbackEXT(instance, &createInfo, nullptr, &callback) != VK_SUCCESS) {
-            throw std::runtime_error("failed to set up debug callback!");
-        }
-    }
-
-    VkResult CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) {
-        auto func = (PFN_vkCreateDebugReportCallbackEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugReportCallbackEXT");
-        if (func != nullptr) {
-            return func(instance, pCreateInfo, pAllocator, pCallback);
-        } else {
-            return VK_ERROR_EXTENSION_NOT_PRESENT;
-        }
-    }
-
-    void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) {
-        auto func = (PFN_vkDestroyDebugReportCallbackEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugReportCallbackEXT");
-        if (func != nullptr) {
-            func(instance, callback, pAllocator);
-        }
-    }
-
     void mainLoop() {
-        while (!glfwWindowShouldClose(window)) {
-            glfwPollEvents();
-            drawFrame();
-        }
+        // while (!glfwWindowShouldClose(window)) {
+        //     glfwPollEvents();
+        //     drawFrame();
+        // }
         vkDeviceWaitIdle(device);
     }
 
@@ -812,20 +790,5 @@ private:
             DestroyDebugReportCallbackEXT(instance, callback, nullptr);
         }
         vkDestroyInstance(instance, nullptr);
-        glfwDestroyWindow(window);
-        glfwTerminate();
     }
 };
-
-int main() {
-    HelloTriangleApplication app;
-
-    try {
-        app.run();
-    } catch (const std::runtime_error& e) {
-        std::cerr << e.what() << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    return 0;
-}
