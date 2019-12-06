@@ -7,7 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Vulkan REQUIRED)
 find_package(SDL2 REQUIRED)
 
-add_executable (main src/main.cpp)
+add_executable (main src/main.cc)
 target_link_libraries (main Vulkan::Vulkan SDL2::SDL2)
 
 file(GLOB_RECURSE GLSL_SOURCE_FILES
