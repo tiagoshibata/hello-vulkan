@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 3.8)
 project (Vulkan CXX)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -9,6 +9,11 @@ find_package(SDL2 REQUIRED)
 
 add_executable (main src/main.cc)
 target_link_libraries (main Vulkan::Vulkan SDL2::SDL2)
+if(MSVC)
+    target_compile_options(main PRIVATE /W4 /WX)
+else()
+    target_compile_options(main PRIVATE -Wall -Wextra -pedantic -Werror)
+endif()
 
 file(GLOB_RECURSE GLSL_SOURCE_FILES
     "*.frag"
