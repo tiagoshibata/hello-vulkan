@@ -7,8 +7,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Vulkan REQUIRED)
 find_package(SDL2 REQUIRED)
 
-add_executable (main src/main.cc)
-target_link_libraries (main Vulkan::Vulkan SDL2::SDL2)
+file(GLOB main_src src/*.cc)
+add_executable(main ${main_src})
+target_link_libraries(main Vulkan::Vulkan SDL2::SDL2)
 if(MSVC)
     target_compile_options(main PRIVATE /W4 /WX)
 else()
@@ -16,8 +17,8 @@ else()
 endif()
 
 file(GLOB_RECURSE GLSL_SOURCE_FILES
-    "*.frag"
-    "*.vert"
+    "src/*.frag"
+    "src/*.vert"
 )
 
 # TODO consider using shaderc, spirv-opt
