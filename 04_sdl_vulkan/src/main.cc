@@ -1,85 +1,21 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
-#include <set>
 #include <vector>
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_vulkan.h>
 #include <vulkan/vulkan.h>
 
+#include "sdl_window.hh"
+
 const auto APPLICATION_NAME = "Vulkan demo";
-const int WIDTH = 800;
-const int HEIGHT = 600;
-
-class SDLWindow {
-public:
-    SDLWindow() {
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
-            sdl_fail();
-
-        window = SDL_CreateWindow("Vulkan", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, SDL_WINDOW_VULKAN | SDL_WINDOW_ALLOW_HIGHDPI);
-        if (!window) {
-            sdl_fail();
-        }
-    }
-
-    std::vector<const char*> get_vulkan_extensions() const {
-        unsigned int count;
-        if (!SDL_Vulkan_GetInstanceExtensions(window, &count, nullptr))
-            sdl_fail();
-
-        std::vector<const char*> extensions(count);
-        if (!SDL_Vulkan_GetInstanceExtensions(window, &count, extensions.data()))
-            sdl_fail();
-        return extensions;
-    }
-
-    VkSurfaceKHR create_vulkan_surface(const VkInstance& instance) {
-        VkSurfaceKHR surface;
-        if (!SDL_Vulkan_CreateSurface(window, instance, &surface))
-            sdl_fail();
-        return surface;
-    }
-
-    std::pair<int, int> get_drawable_size() const {
-        int width, height;
-        SDL_Vulkan_GetDrawableSize(window, &width, &height);
-        return {width, height};
-    }
-
-    void main_loop() {
-        for (;;) {
-            SDL_Event event;
-            while (SDL_WaitEvent(&event)) {
-                switch (event.type) {
-                case SDL_QUIT:
-                    return;
-                }
-            }
-            sdl_fail();
-        }
-    }
-
-    ~SDLWindow() {
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-    }
-
-private:
-    SDL_Window* window = nullptr;
-
-    void sdl_fail() const {
-        throw std::runtime_error(std::string("SDL: ") + SDL_GetError());
-    }
-};
+const auto SWAPCHAIN_EXTENSION = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
 
 class Vulkan {
 public:
     VkInstance create_instance(const std::vector<const char*>& required_extensions) {
         print_extensions();
 
-        VkApplicationInfo app_info = {
+        VkApplicationInfo app_info {
             .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
             .pNext = nullptr,
             .pApplicationName = APPLICATION_NAME,
@@ -88,7 +24,7 @@ public:
             .engineVersion = 0,
             .apiVersion = VK_API_VERSION_1_1,
         };
-        VkInstanceCreateInfo create_info = {
+        VkInstanceCreateInfo create_info {
             .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
@@ -118,7 +54,43 @@ public:
         return *device;
     }
 
+    std::tuple<VkDevice, VkQueue, VkQueue> create_logical_device(VkPhysicalDevice physical_device, VkSurfaceKHR surface) {
+        float queue_priority = 1.0f;
+        VkDeviceQueueCreateInfo queue_create_info {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .queueFamilyIndex = 0,
+            .queueCount = 1,
+            .pQueuePriorities = &queue_priority,
+        };
+        std::array<VkDeviceQueueCreateInfo, 2> queue_create_infos{queue_create_info, queue_create_info};
+        std::tie(queue_create_infos[0].queueFamilyIndex, queue_create_infos[1].queueFamilyIndex) = get_graphics_and_present_queue_families(physical_device, surface);
+
+        VkDeviceCreateInfo create_info {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .queueCreateInfoCount = static_cast<uint32_t>(queue_create_infos.size()),
+            .pQueueCreateInfos = queue_create_infos.data(),
+            .enabledLayerCount = 0,
+            .ppEnabledLayerNames = nullptr,
+            .enabledExtensionCount = 1,
+            .ppEnabledExtensionNames = &SWAPCHAIN_EXTENSION,
+            .pEnabledFeatures = nullptr,
+        };
+        VkDevice device;
+        if (auto status = vkCreateDevice(physical_device, &create_info, nullptr, &device) != VK_SUCCESS; status != VK_SUCCESS)
+            throw std::runtime_error("vkCreateDevice: " + status);
+        VkQueue graphics_queue, present_queue;
+        vkGetDeviceQueue(device, queue_create_infos[0].queueFamilyIndex, 0, &graphics_queue);
+        vkGetDeviceQueue(device, queue_create_infos[1].queueFamilyIndex, 0, &present_queue);
+        return {device, graphics_queue, present_queue};
+    }
+
 private:
+    int graphics_queue_family_index, present_queue_family_index;
+
     void print_extensions() {
         uint32_t extension_count;
         if (auto status = vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr); status != VK_SUCCESS)
@@ -171,7 +143,7 @@ private:
         if (auto status = vkEnumerateDeviceExtensionProperties(device, nullptr, &extension_count, available_extensions.data()); status != VK_SUCCESS)
             throw std::runtime_error("vkEnumerateDeviceExtensionProperties: " + status);
         // For now, check for VK_KHR_SWAPCHAIN_EXTENSION_NAME only
-        return std::any_of(std::begin(available_extensions), std::end(available_extensions), [](const VkExtensionProperties& extension) { return !std::strcmp(extension.extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME); });
+        return std::any_of(std::begin(available_extensions), std::end(available_extensions), [](const VkExtensionProperties& extension) { return !std::strcmp(extension.extensionName, SWAPCHAIN_EXTENSION); });
     }
 
     static bool swapchain_supported(VkPhysicalDevice device, VkSurfaceKHR surface) {
@@ -190,7 +162,10 @@ public:
         Vulkan vulkan;
         const auto instance = vulkan.create_instance(window.get_vulkan_extensions());
         const auto surface = window.create_vulkan_surface(instance);
-        vulkan.pick_physical_device(instance, surface);
+        const auto physical_device = vulkan.pick_physical_device(instance, surface);
+        VkDevice logical_device;
+        VkQueue graphics_queue, present_queue;
+        std::tie(logical_device, graphics_queue, present_queue) = vulkan.create_logical_device(physical_device, surface);
         window.main_loop();
     }
 };
@@ -230,7 +205,6 @@ int main(int, char **) {
 // class OldVulkan {
 // public:
 //     void run() {
-//         createLogicalDevice();
 //         createSwapChain();
 //         createImageViews();
 //         createRenderPass();
