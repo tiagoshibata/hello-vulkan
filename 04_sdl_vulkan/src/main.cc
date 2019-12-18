@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <iostream>
 #include <vector>
@@ -88,7 +89,7 @@ public:
         return {device, graphics_queue, present_queue};
     }
 
-    std::pair<VkSwapchainKHR, std::vector<VkImage>> create_swapchain(VkPhysicalDevice physical_device, VkSurfaceKHR surface, VkDevice device, VkExtent2D surface_extent) {
+    std::pair<VkSwapchainKHR, std::vector<VkImage>> create_swapchain(VkPhysicalDevice physical_device, VkSurfaceKHR surface, VkDevice device, const VkExtent2D& surface_extent) {
         VkSurfaceCapabilitiesKHR capabilities;
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &capabilities);
         uint32_t format_count;
@@ -105,13 +106,15 @@ public:
                 break;
             }
         }
+        assert(chosen_format.format == VK_FORMAT_B8G8R8A8_UNORM);  // TODO remove
 
+        VkExtent2D extent = surface_extent;
         if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max() || capabilities.currentExtent.height != std::numeric_limits<uint32_t>::max()) {
             // FIXME check for zero capabilities.maxImageExtent.width / height:
             // "On some platforms, it is normal that maxImageExtent may become (0, 0), for example when the window is minimized.
             // In such a case, it is not possible to create a swapchain due to the Valid Usage requirements."
-            surface_extent.width = std::clamp(surface_extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-            surface_extent.height = std::clamp(surface_extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+            extent.width = std::clamp(extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+            extent.height = std::clamp(extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
         }
 
         uint32_t image_count = capabilities.minImageCount + 1;
@@ -127,7 +130,7 @@ public:
             .minImageCount = image_count,
             .imageFormat = chosen_format.format,
             .imageColorSpace = chosen_format.colorSpace,
-            .imageExtent = surface_extent,
+            .imageExtent = extent,
             .imageArrayLayers = 1,
             .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
@@ -164,6 +167,38 @@ public:
             throw std::runtime_error("vkGetSwapchainImagesKHR: " + status);
         }
         return {swapchain, swapchain_images};
+    }
+
+    std::vector<VkImageView> create_image_views(VkDevice device, const std::vector<VkImage>& swapchain_images) {
+        std::vector<VkImageView> image_views(swapchain_images.size());
+        for (unsigned i = 0; i < swapchain_images.size(); i++) {
+            const VkImageViewCreateInfo create_info {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .image = swapchain_images[i],
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .format = VK_FORMAT_B8G8R8A8_UNORM,  // TODO populate with actual swapchain format
+                .components {
+                    .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+                },
+                .subresourceRange {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+            };
+
+            if (auto status = vkCreateImageView(device, &create_info, nullptr, &image_views[i]); status != VK_SUCCESS) {
+                throw std::runtime_error("vkCreateImageView: " + status);
+            }
+        }
+        return image_views;
     }
 
 private:
@@ -256,10 +291,11 @@ public:
         const auto surface = window.create_vulkan_surface(instance);
         const auto extent = window.get_drawable_size();
         const auto physical_device = vulkan.pick_physical_device(instance, surface);
-        VkDevice logical_device;
+        VkDevice device;
         VkQueue graphics_queue, present_queue;
-        std::tie(logical_device, graphics_queue, present_queue) = vulkan.create_logical_device(physical_device, surface);
-        const auto swapchain_and_images = vulkan.create_swapchain(physical_device, surface, logical_device, {static_cast<uint32_t>(extent.first), static_cast<uint32_t>(extent.second)});
+        std::tie(device, graphics_queue, present_queue) = vulkan.create_logical_device(physical_device, surface);
+        const auto swapchain_and_images = vulkan.create_swapchain(physical_device, surface, device, {static_cast<uint32_t>(extent.first), static_cast<uint32_t>(extent.second)});
+        const auto image_views = vulkan.create_image_views(device, swapchain_and_images.second);
         window.main_loop();
     }
 };
