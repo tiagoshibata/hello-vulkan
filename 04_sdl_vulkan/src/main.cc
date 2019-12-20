@@ -14,8 +14,7 @@ public:
         Vulkan vulkan(window.get_vulkan_extensions());
         const auto surface = window.create_vulkan_surface(vulkan.get_instance());
         const auto extent = window.get_drawable_size();
-        vulkan.initialize(surface, {static_cast<uint32_t>(extent.first), static_cast<uint32_t>(extent.second)});
-        // const auto image_views = vulkan.create_image_views(device, swapchain_and_images.second);
+        vulkan.initialize(surface, extent.first, extent.second);
         window.main_loop();
     }
 };
@@ -35,27 +34,9 @@ int main(int, char **) {
 }
 
 
-
-
-// struct QueueFamilyIndices {
-//     int graphicsFamily = -1;
-//     int presentFamily = -1;
-
-//     bool isComplete() {
-//         return graphicsFamily >= 0 && presentFamily >= 0;
-//     }
-// };
-
-// struct SwapChainSupportDetails {
-//     VkSurfaceCapabilitiesKHR capabilities;
-//     std::vector<VkSurfaceFormatKHR> formats;
-//     std::vector<VkPresentModeKHR> presentModes;
-// };
-
 // class OldVulkan {
 // public:
 //     void run() {
-//         createImageViews();
 //         createRenderPass();
 //         createGraphicsPipeline();
 //         createFramebuffers();
@@ -357,29 +338,6 @@ int main(int, char **) {
 //             throw std::runtime_error("failed to create render pass!");
 //         }
 
-//     }
-
-//     void createImageViews() {
-//         swapChainImageViews.resize(swapChainImages.size());
-//         for (size_t i = 0; i < swapChainImages.size(); i++) {
-//             VkImageViewCreateInfo create_info = {};
-//             create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-//             create_info.image = swapChainImages[i];
-//             create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-//             create_info.format = swapChainImageFormat;
-//             create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-//             create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-//             create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-//             create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-//             create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-//             create_info.subresourceRange.baseMipLevel = 0;
-//             create_info.subresourceRange.levelCount = 1;
-//             create_info.subresourceRange.baseArrayLayer = 0;
-//             create_info.subresourceRange.layerCount = 1;
-//             if (vkCreateImageView(device, &create_info, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
-//                 throw std::runtime_error("failed to create image views!");
-//             }
-//         }
 //     }
 
 //     void mainLoop() {
