@@ -1,8 +1,11 @@
-cmake_minimum_required (VERSION 3.8)
-project (Vulkan CXX)
+cmake_minimum_required(VERSION 3.16)
+project(Vulkan CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+include(CheckIPOSupported)
+check_ipo_supported()
 
 find_package(Vulkan REQUIRED)
 find_package(SDL2 REQUIRED)
@@ -15,6 +18,7 @@ if(MSVC)
 else()
     target_compile_options(main PRIVATE -Wall -Wextra -pedantic -Werror)
 endif()
+set_property(TARGET main PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 file(GLOB_RECURSE GLSL_SOURCE_FILES
     "src/*.frag"
