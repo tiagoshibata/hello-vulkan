@@ -76,7 +76,7 @@ void Vulkan::create_logical_device() {
         queue_create_info.setQueueFamilyIndex(graphics_queue_family_index_),
         queue_create_info.setQueueFamilyIndex(present_queue_family_index_),
     };
-    const vk::DeviceCreateInfo create_info(vk::DeviceCreateFlags(), static_cast<uint32_t>(queue_create_infos.size()), queue_create_infos.data(), 0, nullptr, 1, &SWAPCHAIN_EXTENSION);
+    const vk::DeviceCreateInfo create_info(vk::DeviceCreateFlags(), graphics_queue_family_index_ == present_queue_family_index_ ? 1 : 2, queue_create_infos.data(), 0, nullptr, 1, &SWAPCHAIN_EXTENSION);
     device_ = physical_device_.createDeviceUnique(create_info);
     graphics_queue_ = device_->getQueue(graphics_queue_family_index_, 0);
     present_queue_ = device_->getQueue(present_queue_family_index_, 0);
