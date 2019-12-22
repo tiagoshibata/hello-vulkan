@@ -8,7 +8,7 @@ public:
 
 private:
     const vk::UniqueInstance instance_;
-    vk::SurfaceKHR surface_;
+    vk::UniqueSurfaceKHR surface_;
     vk::PhysicalDevice physical_device_;
     vk::UniqueDevice device_;
     int graphics_queue_family_index_, present_queue_family_index_;

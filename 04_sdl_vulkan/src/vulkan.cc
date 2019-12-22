@@ -23,7 +23,7 @@ vk::UniqueInstance Vulkan::create_instance(const std::vector<const char*>& requi
 }
 
 void Vulkan::initialize(const VkSurfaceKHR surface, int surface_width, int surface_height) {
-    surface_ = surface;
+    surface_ = vk::UniqueSurfaceKHR(surface, *instance_);
     choose_physical_device();
     create_logical_device();
     create_swapchain(surface_width, surface_height);
@@ -51,7 +51,7 @@ std::pair<int, int> Vulkan::get_graphics_and_present_queue_families(const vk::Ph
     uint32_t present_index = -1;
 
     for (unsigned i = 0; i < queue_family_properties.size(); i++) {
-        if (device.getSurfaceSupportKHR(i, surface_)) {
+        if (device.getSurfaceSupportKHR(i, *surface_)) {
             if (supports_graphics(queue_family_properties[i])) {
                 return {i, i};
             }
@@ -85,7 +85,7 @@ void Vulkan::create_logical_device() {
 void Vulkan::create_swapchain(int width, int height) {
     surface_extent_.width = width;
     surface_extent_.height = height;
-    const auto capabilities = physical_device_.getSurfaceCapabilitiesKHR(surface_);
+    const auto capabilities = physical_device_.getSurfaceCapabilitiesKHR(*surface_);
     if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max() || capabilities.currentExtent.height != std::numeric_limits<uint32_t>::max()) {
         // FIXME check for zero capabilities.maxImageExtent.width / height:
         // "On some platforms, it is normal that maxImageExtent may become (0, 0), for example when the window is minimized.
@@ -98,7 +98,7 @@ void Vulkan::create_swapchain(int width, int height) {
         image_count = capabilities.maxImageCount;
     }
 
-    const auto formats = physical_device_.getSurfaceFormatsKHR(surface_);
+    const auto formats = physical_device_.getSurfaceFormatsKHR(*surface_);
     vk::SurfaceFormatKHR chosen_format = formats[0];
     for (const auto& format : formats) {
         // TODO check for other sRGB colorspaces? One of them must be available:
@@ -110,7 +110,7 @@ void Vulkan::create_swapchain(int width, int height) {
     }
     swapchain_format_ = chosen_format.format;
 
-    vk::SwapchainCreateInfoKHR create_info(vk::SwapchainCreateFlagsKHR(), surface_, image_count, chosen_format.format, chosen_format.colorSpace, surface_extent_, 1,
+    vk::SwapchainCreateInfoKHR create_info(vk::SwapchainCreateFlagsKHR(), *surface_, image_count, chosen_format.format, chosen_format.colorSpace, surface_extent_, 1,
         vk::ImageUsageFlagBits::eColorAttachment, vk::SharingMode::eExclusive, 0, nullptr, capabilities.currentTransform, vk::CompositeAlphaFlagBitsKHR::eOpaque,
         vk::PresentModeKHR::eFifo, true);
     std::array<uint32_t, 2> queue_family_indices;
