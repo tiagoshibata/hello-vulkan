@@ -26,7 +26,9 @@ set_property(TARGET main PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 
 function(vulkan_shader input output)
-    string(MAKE_C_IDENTIFIER ${input} variable_name)
+    get_filename_component(variable_name ${input} NAME)
+    string(MAKE_C_IDENTIFIER ${variable_name} variable_name)
+    set(variable_name "${variable_name}_spirv")
     # TODO enable optimizations in Release builds (consider using shaderc or spirv-opt)
     add_custom_command(
         OUTPUT ${output}
@@ -37,7 +39,7 @@ endfunction()
 file(GLOB glsl_sources CONFIGURE_DEPENDS "src/shaders/*")
 foreach(source ${glsl_sources})
     get_filename_component(output ${source} NAME)
-    set(output "${output}.spv")
+    set(output "${output}.h")
     vulkan_shader(${source} ${output})
     list(APPEND spirv_shaders ${output})
 endforeach()
