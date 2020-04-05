@@ -5,6 +5,7 @@ public:
     Vulkan(const std::vector<const char*>& required_extensions);
     VkInstance get_instance() const { return instance_.get(); };
     void initialize(const VkSurfaceKHR surface, int surface_width, int surface_height);
+    void draw_frame();
 
 private:
     const vk::UniqueInstance instance_;
@@ -17,12 +18,15 @@ private:
     vk::UniqueSwapchainKHR swapchain_;
     vk::Format swapchain_format_;
     std::vector<vk::Image> swapchain_images_;
-    std::vector<vk::ImageView> swapchain_image_views_;
+    std::vector<vk::UniqueImageView> swapchain_image_views_;
     vk::UniqueRenderPass render_pass_;
     vk::UniquePipelineLayout pipeline_layout_;
     vk::UniquePipeline graphics_pipeline_;
     std::vector<vk::UniqueFramebuffer> swapchain_frame_buffers_;
-
+    vk::UniqueCommandPool command_pool_;
+    std::vector<vk::UniqueCommandBuffer> command_buffers_;
+    vk::UniqueSemaphore image_available_semaphore_;
+    vk::UniqueSemaphore render_finished_semaphore_;
 
     vk::UniqueInstance create_instance(const std::vector<const char*>& required_extensions);
     void choose_physical_device();
@@ -35,4 +39,7 @@ private:
     vk::UniqueShaderModule create_shader_module(const uint32_t *spirv, size_t code_size);
     void create_pipeline();
     void create_framebuffers();
+    void create_command_pool();
+    void create_command_buffers();
+    void create_semaphores();
 };

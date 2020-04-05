@@ -47,17 +47,23 @@ std::pair<int, int> SDLWindow::get_drawable_size() const {
     return {width, height};
 }
 
-void SDLWindow::main_loop() {
-    for (;;) {
-        SDL_Event event;
-        while (SDL_WaitEvent(&event)) {
-            switch (event.type) {
-            case SDL_QUIT:
-                return;
+bool SDLWindow::pool() {
+    bool needs_redraw = false;
+    SDL_Event event;
+    SDL_WaitEvent(&event);
+    do {
+        switch (event.type) {
+        case SDL_QUIT:
+            throw std::runtime_error("Quit");
+        case SDL_WINDOWEVENT:
+            switch (event.window.event) {
+            case SDL_WINDOWEVENT_EXPOSED:
+            case SDL_WINDOWEVENT_SIZE_CHANGED:
+                needs_redraw = true;
             }
         }
-        sdl_fail();
-    }
+    } while (SDL_PollEvent(&event));
+    return needs_redraw;
 }
 
 SDLWindow::~SDLWindow() {

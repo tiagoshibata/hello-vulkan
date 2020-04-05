@@ -14,7 +14,7 @@ public:
     [[nodiscard]] std::vector<const char*> get_vulkan_extensions() const;
     [[nodiscard]] VkSurfaceKHR create_vulkan_surface(const VkInstance& instance);
     [[nodiscard]] std::pair<int, int> get_drawable_size() const;
-    void main_loop();
+    bool pool();
     ~SDLWindow();
 
 private:

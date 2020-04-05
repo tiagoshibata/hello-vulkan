@@ -33,6 +33,13 @@ void Vulkan::initialize(const VkSurfaceKHR surface, int surface_width, int surfa
     choose_physical_device();
     create_logical_device();
     create_swapchain(surface_width, surface_height);
+    create_image_views();
+    create_render_pass();
+    create_pipeline();
+    create_framebuffers();
+    create_command_pool();
+    create_command_buffers();
+    create_semaphores();
 }
 
 void Vulkan::choose_physical_device() {
@@ -71,12 +78,12 @@ std::pair<int, int> Vulkan::get_graphics_and_present_queue_families(const vk::Ph
 
 void Vulkan::create_logical_device() {
     const float queue_priority = 1.0f;
-    vk::DeviceQueueCreateInfo queue_create_info(vk::DeviceQueueCreateFlags(), 0, 1, &queue_priority);
+    vk::DeviceQueueCreateInfo queue_create_info({}, 0, 1, &queue_priority);
     const std::array<vk::DeviceQueueCreateInfo, 2> queue_create_infos {
-        queue_create_info.setQueueFamilyIndex(graphics_queue_family_index_),
-        queue_create_info.setQueueFamilyIndex(present_queue_family_index_),
+        vk::DeviceQueueCreateInfo({}, graphics_queue_family_index_, 1, &queue_priority),
+        vk::DeviceQueueCreateInfo({}, present_queue_family_index_, 1, &queue_priority)
     };
-    const vk::DeviceCreateInfo create_info(vk::DeviceCreateFlags(), graphics_queue_family_index_ == present_queue_family_index_ ? 1 : 2, queue_create_infos.data(), 0, nullptr, 1, &SWAPCHAIN_EXTENSION);
+    const vk::DeviceCreateInfo create_info({}, graphics_queue_family_index_ == present_queue_family_index_ ? 1 : 2, queue_create_infos.data(), 0, nullptr, 1, &SWAPCHAIN_EXTENSION);
     device_ = physical_device_.createDeviceUnique(create_info);
     graphics_queue_ = device_->getQueue(graphics_queue_family_index_, 0);
     present_queue_ = device_->getQueue(present_queue_family_index_, 0);
@@ -126,24 +133,24 @@ void Vulkan::create_swapchain(int width, int height) {
 }
 
 void Vulkan::create_image_views() {
-    swapchain_image_views_.reserve(swapchain_images_.size());
+    swapchain_image_views_.resize(swapchain_images_.size());
     for (unsigned i = 0; i < swapchain_images_.size(); i++) {
         const vk::ImageViewCreateInfo create_info(vk::ImageViewCreateFlags(), swapchain_images_[i], vk::ImageViewType::e2D, swapchain_format_,
             vk::ComponentMapping(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
-        swapchain_image_views_.push_back(device_->createImageView(create_info));
+        swapchain_image_views_[i] = device_->createImageViewUnique(create_info);
     }
 }
 
 void Vulkan::create_render_pass() {
-    vk::AttachmentDescription color_attachment_description(vk::AttachmentDescriptionFlags(), swapchain_format_, vk::SampleCountFlagBits::e1, vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
+    const vk::AttachmentDescription color_attachment_description(vk::AttachmentDescriptionFlags(), swapchain_format_, vk::SampleCountFlagBits::e1, vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
         vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare, vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
 
-    vk::AttachmentReference color_attachment_reference(0, vk::ImageLayout::eColorAttachmentOptimal);
-    vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0, nullptr, 1, &color_attachment_reference);
+    const vk::AttachmentReference color_attachment_reference(0, vk::ImageLayout::eColorAttachmentOptimal);
+    const vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0, nullptr, 1, &color_attachment_reference);
 
-    vk::SubpassDependency dependency(VK_SUBPASS_EXTERNAL, 0, vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlags(), vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite);
+    const vk::SubpassDependency dependency(VK_SUBPASS_EXTERNAL, 0, vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlags(), vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite);
 
-    vk::RenderPassCreateInfo create_info(vk::RenderPassCreateFlags(), 1, &color_attachment_description, 1, &subpass, 1, &dependency);
+    const vk::RenderPassCreateInfo create_info(vk::RenderPassCreateFlags(), 1, &color_attachment_description, 1, &subpass, 1, &dependency);
     render_pass_ = device_->createRenderPassUnique(create_info);
 }
 
@@ -158,7 +165,7 @@ vk::UniqueShaderModule Vulkan::create_shader_module(const uint32_t *spirv, size_
 #include "/home/tiago/src/vulkan/04_sdl_vulkan/build/gcc/shader.vert.h"
 
 void Vulkan::create_pipeline() {
-    const auto vertex_shader = create_shader_module(shader_vert_spirv, sizeof(shader_frag_spirv));
+    const auto vertex_shader = create_shader_module(shader_vert_spirv, sizeof(shader_vert_spirv));
     const auto fragment_shader = create_shader_module(shader_frag_spirv, sizeof(shader_frag_spirv));
 
     vk::PipelineShaderStageCreateInfo vertex_create_info({}, vk::ShaderStageFlagBits::eVertex, *vertex_shader, "main");
@@ -191,7 +198,62 @@ void Vulkan::create_pipeline() {
 void Vulkan::create_framebuffers() {
     swapchain_frame_buffers_.resize(swapchain_image_views_.size());
     for (size_t i = 0; i < swapchain_frame_buffers_.size(); i++) {
-        vk::FramebufferCreateInfo framebuffer_create_info({}, *render_pass_, 1, &swapchain_image_views_[i], surface_extent_.width, surface_extent_.height, 1);
+        const vk::FramebufferCreateInfo framebuffer_create_info({}, *render_pass_, 1, &*swapchain_image_views_[i], surface_extent_.width, surface_extent_.height, 1);
         swapchain_frame_buffers_[i] = device_->createFramebufferUnique(framebuffer_create_info);
     }
+}
+
+void Vulkan::create_command_pool() {
+    const vk::CommandPoolCreateInfo command_pool_create_info({}, graphics_queue_family_index_);
+    command_pool_ = device_->createCommandPoolUnique(command_pool_create_info);
+}
+
+void Vulkan::create_command_buffers() {
+    const vk::CommandBufferAllocateInfo allocate_info(*command_pool_, vk::CommandBufferLevel::ePrimary, swapchain_frame_buffers_.size());
+    command_buffers_ = device_->allocateCommandBuffersUnique(allocate_info);
+    const vk::CommandBufferBeginInfo begin_info(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
+    for (size_t i = 0; i < command_buffers_.size(); i++) {
+        command_buffers_[i]->begin(begin_info);
+
+        vk::ClearValue clear_color(vk::ClearColorValue(std::array<float, 4>{0.f, 0.f, 0.f, 1.f}));
+        vk::RenderPassBeginInfo render_pass_begin_info(*render_pass_, *swapchain_frame_buffers_[i], vk::Rect2D({0, 0}, surface_extent_), 1, &clear_color);
+
+        command_buffers_[i]->beginRenderPass(render_pass_begin_info, vk::SubpassContents::eInline);
+        command_buffers_[i]->bindPipeline(vk::PipelineBindPoint::eGraphics, *graphics_pipeline_);
+        command_buffers_[i]->draw(3, 1, 0, 0);
+        command_buffers_[i]->endRenderPass();
+        command_buffers_[i]->end();
+    }
+}
+
+void Vulkan::create_semaphores() {
+    vk::SemaphoreCreateInfo create_info;
+    image_available_semaphore_ = device_->createSemaphoreUnique(create_info);
+    render_finished_semaphore_ = device_->createSemaphoreUnique(create_info);
+}
+
+void Vulkan::draw_frame() {
+    const auto image_index = device_->acquireNextImageKHR(*swapchain_, std::numeric_limits<uint64_t>::max(), *image_available_semaphore_, nullptr);
+    if (image_index.result != vk::Result::eSuccess) {
+        throw std::runtime_error("acquireNextImageKHR failed: " + vk::to_string(image_index.result));
+    }
+
+    vk::PipelineStageFlags wait_dst_stage_mask[] = {vk::PipelineStageFlagBits::eColorAttachmentOutput};
+    vk::SubmitInfo submit_info(1, &*image_available_semaphore_, wait_dst_stage_mask, 1, &*command_buffers_[image_index.value], 1, &*render_finished_semaphore_);
+    graphics_queue_.submit({submit_info}, nullptr);
+
+    vk::PresentInfoKHR present_info(1, &*render_finished_semaphore_, 1, &*swapchain_, &image_index.value);
+    const auto result = present_queue_.presentKHR(&present_info);
+    switch (result) {
+    case vk::Result::eSuccess:
+    case vk::Result::eSuboptimalKHR:
+        break;
+    case vk::Result::eErrorOutOfDateKHR:
+        // TODO Recreate swapchain
+        present_queue_.waitIdle();
+        throw std::runtime_error("ErrorOutOfDateKHR");
+    default:
+        throw std::runtime_error("vk::Queue::presentKHR: " + vk::to_string(result));
+    }
+    present_queue_.waitIdle();
 }
