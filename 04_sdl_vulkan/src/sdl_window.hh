@@ -9,6 +9,8 @@
 class SDLWindow {
 public:
     SDLWindow();
+    SDLWindow(const SDLWindow&) = delete;
+    SDLWindow& operator=(const SDLWindow&) = delete;
     [[nodiscard]] std::vector<const char*> get_vulkan_extensions() const;
     [[nodiscard]] VkSurfaceKHR create_vulkan_surface(const VkInstance& instance);
     [[nodiscard]] std::pair<int, int> get_drawable_size() const;

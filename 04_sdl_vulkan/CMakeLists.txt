@@ -1,14 +1,16 @@
 cmake_minimum_required(VERSION 3.16)
 project(Vulkan CXX)
+
+# Properties for all targets
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
 include(CheckIPOSupported)
 check_ipo_supported()
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 
-find_program(glslang_validator glslangValidator)
-if(NOT glslang_validator)
+find_program(GLSLANGVALIDATOR glslangValidator)
+if(NOT GLSLANGVALIDATOR)
 	message(FATAL_ERROR "glslangValidator not found")
 endif()
 find_package(Vulkan REQUIRED)
@@ -20,9 +22,8 @@ target_link_libraries(main Vulkan::Vulkan SDL2::SDL2)
 if(MSVC)
     target_compile_options(main PRIVATE /W4 /WX)
 else()
-    target_compile_options(main PRIVATE -Wall -Wextra -pedantic -Werror)
+    target_compile_options(main PRIVATE -Wall -Wextra -Werror -pedantic)
 endif()
-set_property(TARGET main PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 
 function(vulkan_shader input output)
@@ -32,7 +33,7 @@ function(vulkan_shader input output)
     # TODO enable optimizations in Release builds (consider using shaderc or spirv-opt)
     add_custom_command(
         OUTPUT ${output}
-        COMMAND ${glslang_validator} -V110 ${input} --vn ${variable_name} -o ${output}
+        COMMAND ${GLSLANGVALIDATOR} -V110 ${input} --vn ${variable_name} -o ${output}
         DEPENDS ${input})
 endfunction()
 

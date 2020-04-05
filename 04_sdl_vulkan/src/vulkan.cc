@@ -11,6 +11,12 @@ void print_extensions() {
     for (const auto& extension : vk::enumerateInstanceExtensionProperties())
         std::cout << "\t" << extension.extensionName << "\n";
 }
+
+bool required_extensions_supported(const vk::PhysicalDevice device) {
+    const auto extensions = device.enumerateDeviceExtensionProperties();
+    // For now, check for VK_KHR_SWAPCHAIN_EXTENSION_NAME only
+    return std::any_of(std::begin(extensions), std::end(extensions), [](const vk::ExtensionProperties& extension) { return !std::strcmp(extension.extensionName, SWAPCHAIN_EXTENSION); });
+}
 }
 
 Vulkan::Vulkan(const std::vector<const char*>& required_extensions) : instance_(create_instance(required_extensions)) {}
@@ -45,7 +51,7 @@ bool Vulkan::is_device_suitable(const vk::PhysicalDevice device) {
     return graphics_queue_family_index_ != -1 && present_queue_family_index_ != -1 && required_extensions_supported(device);
 }
 
-std::pair<int, int> Vulkan::get_graphics_and_present_queue_families(const vk::PhysicalDevice device) {
+std::pair<int, int> Vulkan::get_graphics_and_present_queue_families(const vk::PhysicalDevice device) const {
     const auto supports_graphics = [](const vk::QueueFamilyProperties& properties){ return properties.queueFlags & vk::QueueFlagBits::eGraphics; };
     const auto queue_family_properties = device.getQueueFamilyProperties();
     uint32_t present_index = -1;
@@ -61,12 +67,6 @@ std::pair<int, int> Vulkan::get_graphics_and_present_queue_families(const vk::Ph
     const auto graphics = std::find_if(std::begin(queue_family_properties), std::end(queue_family_properties), supports_graphics);
     uint32_t graphics_index = graphics == std::end(queue_family_properties) ? -1 : graphics - std::begin(queue_family_properties);
     return {graphics_index, present_index};
-}
-
-bool Vulkan::required_extensions_supported(const vk::PhysicalDevice device) {
-    const auto extensions = device.enumerateDeviceExtensionProperties();
-    // For now, check for VK_KHR_SWAPCHAIN_EXTENSION_NAME only
-    return std::any_of(std::begin(extensions), std::end(extensions), [](const vk::ExtensionProperties& extension) { return !std::strcmp(extension.extensionName, SWAPCHAIN_EXTENSION); });
 }
 
 void Vulkan::create_logical_device() {
@@ -131,5 +131,67 @@ void Vulkan::create_image_views() {
         const vk::ImageViewCreateInfo create_info(vk::ImageViewCreateFlags(), swapchain_images_[i], vk::ImageViewType::e2D, swapchain_format_,
             vk::ComponentMapping(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
         swapchain_image_views_.push_back(device_->createImageView(create_info));
+    }
+}
+
+void Vulkan::create_render_pass() {
+    vk::AttachmentDescription color_attachment_description(vk::AttachmentDescriptionFlags(), swapchain_format_, vk::SampleCountFlagBits::e1, vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
+        vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare, vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
+
+    vk::AttachmentReference color_attachment_reference(0, vk::ImageLayout::eColorAttachmentOptimal);
+    vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0, nullptr, 1, &color_attachment_reference);
+
+    vk::SubpassDependency dependency(VK_SUBPASS_EXTERNAL, 0, vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlags(), vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite);
+
+    vk::RenderPassCreateInfo create_info(vk::RenderPassCreateFlags(), 1, &color_attachment_description, 1, &subpass, 1, &dependency);
+    render_pass_ = device_->createRenderPassUnique(create_info);
+}
+
+vk::UniqueShaderModule Vulkan::create_shader_module(const uint32_t *spirv, size_t code_size) {
+    const vk::ShaderModuleCreateInfo create_info(vk::ShaderModuleCreateFlags(), code_size, spirv);
+    return device_->createShaderModuleUnique(create_info);
+}
+
+// TODO remove hardcoded shaders
+#include <cstdint>
+#include "/home/tiago/src/vulkan/04_sdl_vulkan/build/gcc/shader.frag.h"
+#include "/home/tiago/src/vulkan/04_sdl_vulkan/build/gcc/shader.vert.h"
+
+void Vulkan::create_pipeline() {
+    const auto vertex_shader = create_shader_module(shader_vert_spirv, sizeof(shader_frag_spirv));
+    const auto fragment_shader = create_shader_module(shader_frag_spirv, sizeof(shader_frag_spirv));
+
+    vk::PipelineShaderStageCreateInfo vertex_create_info({}, vk::ShaderStageFlagBits::eVertex, *vertex_shader, "main");
+    vk::PipelineShaderStageCreateInfo fragment_create_info({}, vk::ShaderStageFlagBits::eFragment, *fragment_shader, "main");
+    vk::PipelineShaderStageCreateInfo stages_create_info[] = {vertex_create_info, fragment_create_info};
+    vk::PipelineVertexInputStateCreateInfo vertex_input_info;
+
+    vk::PipelineInputAssemblyStateCreateInfo input_assembly({}, vk::PrimitiveTopology::eTriangleList);
+
+    vk::Viewport viewport(0., 0., surface_extent_.width, surface_extent_.height, 0., 1.);
+    vk::Rect2D scissor({}, surface_extent_);
+    vk::PipelineViewportStateCreateInfo viewport_state({}, 1, &viewport, 1, &scissor);
+    vk::PipelineRasterizationStateCreateInfo rasterizer({}, false, false, vk::PolygonMode::eFill, vk::CullModeFlagBits::eBack, vk::FrontFace::eClockwise, false, {}, {}, {}, 1.);
+    vk::PipelineMultisampleStateCreateInfo multisampling({}, vk::SampleCountFlagBits::e1, false);
+    vk::PipelineColorBlendAttachmentState color_blend_attachment(false, {}, {}, {}, {}, {}, {}, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+    vk::PipelineColorBlendStateCreateInfo color_blend_create_info({}, {}, vk::LogicOp::eClear, 1, &color_blend_attachment);
+
+    vk::PipelineLayoutCreateInfo pipeline_layout_info;
+    pipeline_layout_ = device_->createPipelineLayoutUnique(pipeline_layout_info);
+
+    vk::GraphicsPipelineCreateInfo pipeline_create_info({}, 2, stages_create_info, &vertex_input_info, &input_assembly, {}, &viewport_state, &rasterizer, &multisampling, {}, &color_blend_create_info, {}, *pipeline_layout_, *render_pass_);
+    auto pipeline_result_value = device_->createGraphicsPipelinesUnique(nullptr, pipeline_create_info);
+    // if (pipeline_result_value.result != vk::Result::eSuccess) {
+    //     // TODO proper error handling
+    //     throw std::runtime_error("Failed to create pipeline");
+    // }
+    graphics_pipeline_ = std::move(pipeline_result_value[0]);
+}
+
+void Vulkan::create_framebuffers() {
+    swapchain_frame_buffers_.resize(swapchain_image_views_.size());
+    for (size_t i = 0; i < swapchain_frame_buffers_.size(); i++) {
+        vk::FramebufferCreateInfo framebuffer_create_info({}, *render_pass_, 1, &swapchain_image_views_[i], surface_extent_.width, surface_extent_.height, 1);
+        swapchain_frame_buffers_[i] = device_->createFramebufferUnique(framebuffer_create_info);
     }
 }
