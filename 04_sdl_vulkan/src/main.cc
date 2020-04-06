@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 
+#include "quit_exception.hh"
 #include "sdl_window.hh"
 #include "vulkan.hh"
 
@@ -13,12 +14,11 @@ private:
     Vulkan vulkan_;
 
 public:
-    App() : vulkan_(window_.get_vulkan_extensions()) {}
+    App() : vulkan_(window_.get_vulkan_extensions(), [this]() {return window_.get_drawable_size();}, SDLWindow::wait_window_show_event) {}
 
     void run() {
         const auto surface = window_.create_vulkan_surface(vulkan_.get_instance());
-        const auto extent = window_.get_drawable_size();
-        vulkan_.initialize(surface, extent.first, extent.second);
+        vulkan_.initialize(surface);
         main_loop();
     }
 
@@ -39,9 +39,14 @@ int main(int, char **) {
     try {
         App app;
         app.run();
+    } catch (const quit_exception& e) {
+
     } catch (const std::runtime_error& e) {
+        std::cerr << "Runtime error: " << e.what() << std::endl;
+        throw;
+    } catch (const std::exception& e) {
         std::cerr << "Exception: " << e.what() << std::endl;
-        // throw;
+        throw;
     } catch (...) {
         throw;
     }

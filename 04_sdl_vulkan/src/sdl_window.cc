@@ -4,6 +4,8 @@
 
 #include <SDL2/SDL_vulkan.h>
 
+#include "quit_exception.hh"
+
 const int WIDTH = 800;
 const int HEIGHT = 600;
 
@@ -47,6 +49,23 @@ std::pair<int, int> SDLWindow::get_drawable_size() const {
     return {width, height};
 }
 
+void SDLWindow::wait_window_show_event() {
+    SDL_Event event;
+    while (SDL_WaitEvent(&event)) {
+        switch (event.type) {
+        case SDL_QUIT:
+            throw quit_exception();
+        case SDL_WINDOWEVENT:
+            switch (event.window.event) {
+            case SDL_WINDOWEVENT_EXPOSED:
+            case SDL_WINDOWEVENT_SIZE_CHANGED:
+                return;
+            }
+        }
+    }
+    sdl_fail();
+}
+
 bool SDLWindow::pool() {
     bool needs_redraw = false;
     SDL_Event event;
@@ -54,7 +73,7 @@ bool SDLWindow::pool() {
     do {
         switch (event.type) {
         case SDL_QUIT:
-            throw std::runtime_error("Quit");
+            throw quit_exception();
         case SDL_WINDOWEVENT:
             switch (event.window.event) {
             case SDL_WINDOWEVENT_EXPOSED:

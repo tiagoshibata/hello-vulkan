@@ -16,7 +16,11 @@ endif()
 find_package(Vulkan REQUIRED)
 find_package(SDL2 REQUIRED)
 
-file(GLOB main_sources CONFIGURE_DEPENDS src/*.cc)
+set(main_sources
+    src/main.cc
+    src/sdl_window.cc
+    src/vulkan.cc
+)
 add_executable(main ${main_sources})
 target_link_libraries(main Vulkan::Vulkan SDL2::SDL2)
 if(MSVC)
@@ -30,6 +34,7 @@ function(vulkan_shader input output)
     get_filename_component(variable_name ${input} NAME)
     string(MAKE_C_IDENTIFIER ${variable_name} variable_name)
     set(variable_name "${variable_name}_spirv")
+    include_directories("${CMAKE_CURRENT_BINARY_DIR}")
     # TODO enable optimizations in Release builds (consider using shaderc or spirv-opt)
     add_custom_command(
         OUTPUT ${output}

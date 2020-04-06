@@ -15,6 +15,7 @@ public:
     [[nodiscard]] VkSurfaceKHR create_vulkan_surface(const VkInstance& instance);
     [[nodiscard]] std::pair<int, int> get_drawable_size() const;
     bool pool();
+    static void wait_window_show_event();
     ~SDLWindow();
 
 private:

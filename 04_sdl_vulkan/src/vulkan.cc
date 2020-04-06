@@ -19,7 +19,8 @@ bool required_extensions_supported(const vk::PhysicalDevice device) {
 }
 }
 
-Vulkan::Vulkan(const std::vector<const char*>& required_extensions) : instance_(create_instance(required_extensions)) {}
+Vulkan::Vulkan(const std::vector<const char*>& required_extensions, const std::function<std::pair<int, int>()>& get_extent, const std::function<void()>& wait_window_show_event) :
+    instance_(create_instance(required_extensions)), get_extent_(get_extent), wait_window_show_event_(wait_window_show_event) {}
 
 vk::UniqueInstance Vulkan::create_instance(const std::vector<const char*>& required_extensions) {
     print_extensions();
@@ -28,18 +29,14 @@ vk::UniqueInstance Vulkan::create_instance(const std::vector<const char*>& requi
     return vk::createInstanceUnique(create_info);
 }
 
-void Vulkan::initialize(const VkSurfaceKHR surface, int surface_width, int surface_height) {
+void Vulkan::initialize(const VkSurfaceKHR surface) {
     surface_ = vk::UniqueSurfaceKHR(surface, *instance_);
     choose_physical_device();
     create_logical_device();
-    create_swapchain(surface_width, surface_height);
-    create_image_views();
-    create_render_pass();
-    create_pipeline();
-    create_framebuffers();
     create_command_pool();
-    create_command_buffers();
     create_semaphores();
+
+    recreate_swapchain();
 }
 
 void Vulkan::choose_physical_device() {
@@ -89,17 +86,38 @@ void Vulkan::create_logical_device() {
     present_queue_ = device_->getQueue(present_queue_family_index_, 0);
 }
 
-void Vulkan::create_swapchain(int width, int height) {
-    surface_extent_.width = width;
-    surface_extent_.height = height;
-    const auto capabilities = physical_device_.getSurfaceCapabilitiesKHR(*surface_);
-    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max() || capabilities.currentExtent.height != std::numeric_limits<uint32_t>::max()) {
-        // FIXME check for zero capabilities.maxImageExtent.width / height:
+void Vulkan::recreate_swapchain() {
+    device_->waitIdle();
+    create_swapchain();
+    create_image_views();
+    create_render_pass();
+    create_pipeline();
+    create_framebuffers();
+    create_command_buffers();
+}
+
+vk::SurfaceCapabilitiesKHR Vulkan::update_surface_capabilities() {
+    for (;;) {
+        auto capabilities = physical_device_.getSurfaceCapabilitiesKHR(*surface_);
+        // "currentExtent is the current width and height of the surface, or the special value (0xFFFFFFFF, 0xFFFFFFFF) indicating
+        // that the surface size will be determined by the extent of a swapchain targeting the surface"
+        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max() || capabilities.currentExtent.height != std::numeric_limits<uint32_t>::max()) {
+            surface_extent_ = capabilities.currentExtent;
+        } else {
+            std::tie(surface_extent_.width, surface_extent_.height) = get_extent_();
+            surface_extent_.width = std::clamp(surface_extent_.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+            surface_extent_.height = std::clamp(surface_extent_.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+        }
         // "On some platforms, it is normal that maxImageExtent may become (0, 0), for example when the window is minimized.
         // In such a case, it is not possible to create a swapchain due to the Valid Usage requirements."
-        surface_extent_.width = std::clamp(surface_extent_.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-        surface_extent_.height = std::clamp(surface_extent_.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+        if (surface_extent_.width && surface_extent_.height)
+            return capabilities;
+        wait_window_show_event_();
     }
+}
+
+void Vulkan::create_swapchain() {
+    const auto capabilities = update_surface_capabilities();
     uint32_t image_count = capabilities.minImageCount + 1;
     if (capabilities.maxImageCount && image_count > capabilities.maxImageCount) {
         image_count = capabilities.maxImageCount;
@@ -161,8 +179,8 @@ vk::UniqueShaderModule Vulkan::create_shader_module(const uint32_t *spirv, size_
 
 // TODO remove hardcoded shaders
 #include <cstdint>
-#include "/home/tiago/src/vulkan/04_sdl_vulkan/build/gcc/shader.frag.h"
-#include "/home/tiago/src/vulkan/04_sdl_vulkan/build/gcc/shader.vert.h"
+#include "shader.frag.h"
+#include "shader.vert.h"
 
 void Vulkan::create_pipeline() {
     const auto vertex_shader = create_shader_module(shader_vert_spirv, sizeof(shader_vert_spirv));
@@ -233,27 +251,21 @@ void Vulkan::create_semaphores() {
 }
 
 void Vulkan::draw_frame() {
-    const auto image_index = device_->acquireNextImageKHR(*swapchain_, std::numeric_limits<uint64_t>::max(), *image_available_semaphore_, nullptr);
-    if (image_index.result != vk::Result::eSuccess) {
-        throw std::runtime_error("acquireNextImageKHR failed: " + vk::to_string(image_index.result));
-    }
+    bool swapchain_outdated = false;
+    try {
+        const auto image_index = device_->acquireNextImageKHR(*swapchain_, std::numeric_limits<uint64_t>::max(), *image_available_semaphore_, nullptr);
 
-    vk::PipelineStageFlags wait_dst_stage_mask[] = {vk::PipelineStageFlagBits::eColorAttachmentOutput};
-    vk::SubmitInfo submit_info(1, &*image_available_semaphore_, wait_dst_stage_mask, 1, &*command_buffers_[image_index.value], 1, &*render_finished_semaphore_);
-    graphics_queue_.submit({submit_info}, nullptr);
+        vk::PipelineStageFlags wait_dst_stage_mask[] = {vk::PipelineStageFlagBits::eColorAttachmentOutput};
+        vk::SubmitInfo submit_info(1, &*image_available_semaphore_, wait_dst_stage_mask, 1, &*command_buffers_[image_index.value], 1, &*render_finished_semaphore_);
+        graphics_queue_.submit({submit_info}, nullptr);
 
-    vk::PresentInfoKHR present_info(1, &*render_finished_semaphore_, 1, &*swapchain_, &image_index.value);
-    const auto result = present_queue_.presentKHR(&present_info);
-    switch (result) {
-    case vk::Result::eSuccess:
-    case vk::Result::eSuboptimalKHR:
-        break;
-    case vk::Result::eErrorOutOfDateKHR:
-        // TODO Recreate swapchain
+        vk::PresentInfoKHR present_info(1, &*render_finished_semaphore_, 1, &*swapchain_, &image_index.value);
         present_queue_.waitIdle();
-        throw std::runtime_error("ErrorOutOfDateKHR");
-    default:
-        throw std::runtime_error("vk::Queue::presentKHR: " + vk::to_string(result));
+        const auto present_result = present_queue_.presentKHR(present_info);
+        swapchain_outdated = image_index.result == vk::Result::eSuboptimalKHR || present_result == vk::Result::eSuboptimalKHR;
+    } catch (const vk::OutOfDateKHRError& e) {
+        swapchain_outdated = true;
     }
-    present_queue_.waitIdle();
+    if (swapchain_outdated)
+        recreate_swapchain();
 }

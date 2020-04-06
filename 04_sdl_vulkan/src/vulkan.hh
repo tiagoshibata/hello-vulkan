@@ -1,14 +1,19 @@
+#include <functional>
+#include <utility>
+
 #include <vulkan/vulkan.hpp>
 
 class Vulkan {
 public:
-    Vulkan(const std::vector<const char*>& required_extensions);
+    Vulkan(const std::vector<const char*>& required_extensions, const std::function<std::pair<int, int>()>& get_extent, const std::function<void()>& wait_window_show_event);
     VkInstance get_instance() const { return instance_.get(); };
-    void initialize(const VkSurfaceKHR surface, int surface_width, int surface_height);
+    void initialize(const VkSurfaceKHR surface);
     void draw_frame();
 
 private:
     const vk::UniqueInstance instance_;
+    const std::function<std::pair<int, int>()> get_extent_;
+    const std::function<void()> wait_window_show_event_;
     vk::UniqueSurfaceKHR surface_;
     vk::PhysicalDevice physical_device_;
     vk::UniqueDevice device_;
@@ -33,7 +38,9 @@ private:
     bool is_device_suitable(const vk::PhysicalDevice device);
     std::pair<int, int> get_graphics_and_present_queue_families(const vk::PhysicalDevice device) const;
     void create_logical_device();
-    void create_swapchain(int surface_width, int surface_height);
+    void recreate_swapchain();
+    vk::SurfaceCapabilitiesKHR update_surface_capabilities();
+    void create_swapchain();
     void create_image_views();
     void create_render_pass();
     vk::UniqueShaderModule create_shader_module(const uint32_t *spirv, size_t code_size);
