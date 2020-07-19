@@ -23,9 +23,7 @@ set(main_sources
 )
 add_executable(main ${main_sources})
 target_link_libraries(main Vulkan::Vulkan SDL2::SDL2)
-if(MSVC)
-    target_compile_options(main PRIVATE /W4 /WX)
-else()
+if(NOT MSVC)
     target_compile_options(main PRIVATE -Wall -Wextra -Werror -pedantic)
 endif()
 

@@ -8,28 +8,28 @@ const auto APPLICATION_NAME = "Vulkan demo";
 const auto SWAPCHAIN_EXTENSION = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
 
 namespace {
-void print_extensions() {
-    std::cout << "Available extensions:\n";
-    for (const auto& extension : vk::enumerateInstanceExtensionProperties())
-        std::cout << "\t" << extension.extensionName << "\n";
-}
+    void print_extensions() {
+        std::cout << "Available extensions:\n";
+        for (const auto& extension : vk::enumerateInstanceExtensionProperties())
+            std::cout << "\t" << extension.extensionName << "\n";
+    }
 
-bool required_extensions_supported(const vk::PhysicalDevice device) {
-    const auto extensions = device.enumerateDeviceExtensionProperties();
-    // For now, check for VK_KHR_SWAPCHAIN_EXTENSION_NAME only
-    return std::any_of(std::begin(extensions), std::end(extensions), [](const vk::ExtensionProperties& extension) { return !std::strcmp(extension.extensionName, SWAPCHAIN_EXTENSION); });
-}
+    bool required_extensions_supported(const vk::PhysicalDevice device) {
+        const auto extensions = device.enumerateDeviceExtensionProperties();
+        // For now, check for VK_KHR_SWAPCHAIN_EXTENSION_NAME only
+        return std::any_of(std::begin(extensions), std::end(extensions), [](const vk::ExtensionProperties& extension) { return !std::strcmp(extension.extensionName, SWAPCHAIN_EXTENSION); });
+    }
 }
 
 Vulkan::Vulkan(const std::vector<const char*>& required_extensions, std::function<std::pair<int, int>()>  get_extent, std::function<void()>  wait_window_show_event) :
     instance_(create_instance(required_extensions)), get_extent_(std::move(get_extent)), wait_window_show_event_(std::move(wait_window_show_event)) {}
 
-vk::UniqueInstance Vulkan::create_instance(const std::vector<const char*>& required_extensions) {
-    print_extensions();
-    const vk::ApplicationInfo application_info(APPLICATION_NAME, VK_MAKE_VERSION(1, 2, 0), nullptr, 0, VK_API_VERSION_1_1);
-    const vk::InstanceCreateInfo create_info(vk::InstanceCreateFlags(), &application_info, 0, nullptr, static_cast<uint32_t>(required_extensions.size()), required_extensions.data());
-    return vk::createInstanceUnique(create_info);
-}
+    vk::UniqueInstance Vulkan::create_instance(const std::vector<const char*>& required_extensions) {
+        print_extensions();
+        const vk::ApplicationInfo application_info(APPLICATION_NAME, VK_MAKE_VERSION(1, 2, 0), nullptr, 0, VK_API_VERSION_1_1);
+        const vk::InstanceCreateInfo create_info(vk::InstanceCreateFlags(), &application_info, 0, nullptr, static_cast<uint32_t>(required_extensions.size()), required_extensions.data());
+        return vk::createInstanceUnique(create_info);
+    }
 
 void Vulkan::initialize(const VkSurfaceKHR surface) {
     surface_ = vk::UniqueSurfaceKHR(surface, *instance_);
@@ -80,7 +80,7 @@ void Vulkan::create_logical_device() {
     vk::DeviceQueueCreateInfo queue_create_info({}, 0, 1, &queue_priority);
     const std::array<vk::DeviceQueueCreateInfo, 2> queue_create_infos {
         vk::DeviceQueueCreateInfo({}, graphics_queue_family_index_, 1, &queue_priority),
-        vk::DeviceQueueCreateInfo({}, present_queue_family_index_, 1, &queue_priority)
+            vk::DeviceQueueCreateInfo({}, present_queue_family_index_, 1, &queue_priority)
     };
     const vk::DeviceCreateInfo create_info({}, graphics_queue_family_index_ == present_queue_family_index_ ? 1 : 2, queue_create_infos.data(), 0, nullptr, 1, &SWAPCHAIN_EXTENSION);
     device_ = physical_device_.createDeviceUnique(create_info);
@@ -138,8 +138,8 @@ void Vulkan::create_swapchain() {
     swapchain_format_ = chosen_format.format;
 
     vk::SwapchainCreateInfoKHR create_info(vk::SwapchainCreateFlagsKHR(), *surface_, image_count, chosen_format.format, chosen_format.colorSpace, surface_extent_, 1,
-        vk::ImageUsageFlagBits::eColorAttachment, vk::SharingMode::eExclusive, 0, nullptr, capabilities.currentTransform, vk::CompositeAlphaFlagBitsKHR::eOpaque,
-        vk::PresentModeKHR::eFifo, true);
+            vk::ImageUsageFlagBits::eColorAttachment, vk::SharingMode::eExclusive, 0, nullptr, capabilities.currentTransform, vk::CompositeAlphaFlagBitsKHR::eOpaque,
+            vk::PresentModeKHR::eFifo, true);
     std::array<uint32_t, 2> queue_family_indices;
     if (graphics_queue_family_index_ != present_queue_family_index_) {
         queue_family_indices = {static_cast<uint32_t>(graphics_queue_family_index_), static_cast<uint32_t>(present_queue_family_index_)};
@@ -156,14 +156,14 @@ void Vulkan::create_image_views() {
     swapchain_image_views_.resize(swapchain_images_.size());
     for (unsigned i = 0; i < swapchain_images_.size(); i++) {
         const vk::ImageViewCreateInfo create_info(vk::ImageViewCreateFlags(), swapchain_images_[i], vk::ImageViewType::e2D, swapchain_format_,
-            vk::ComponentMapping(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+                vk::ComponentMapping(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
         swapchain_image_views_[i] = device_->createImageViewUnique(create_info);
     }
 }
 
 void Vulkan::create_render_pass() {
     const vk::AttachmentDescription color_attachment_description(vk::AttachmentDescriptionFlags(), swapchain_format_, vk::SampleCountFlagBits::e1, vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
-        vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare, vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
+            vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare, vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
 
     const vk::AttachmentReference color_attachment_reference(0, vk::ImageLayout::eColorAttachmentOptimal);
     const vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0, nullptr, 1, &color_attachment_reference);
@@ -208,7 +208,12 @@ void Vulkan::create_pipeline() {
     pipeline_layout_ = device_->createPipelineLayoutUnique(pipeline_layout_info);
 
     vk::GraphicsPipelineCreateInfo pipeline_create_info({}, 2, stages_create_info, &vertex_input_info, &input_assembly, {}, &viewport_state, &rasterizer, &multisampling, {}, &color_blend_create_info, {}, *pipeline_layout_, *render_pass_);
-    graphics_pipeline_ = device_->createGraphicsPipelineUnique(nullptr, pipeline_create_info).value;
+    auto pipeline_result_value = device_->createGraphicsPipelinesUnique(nullptr, std::move(pipeline_create_info));
+    if (pipeline_result_value.result != vk::Result::eSuccess) {
+        // TODO proper error handling
+        throw std::runtime_error("Failed to create pipeline");
+    }
+    graphics_pipeline_ = std::move(pipeline_result_value.value[0]);
 }
 
 void Vulkan::create_framebuffers() {
