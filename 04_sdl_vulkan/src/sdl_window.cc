@@ -19,7 +19,7 @@ SDLWindow::SDLWindow() {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
         sdl_fail();
 
-    window = SDL_CreateWindow("Vulkan", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, SDL_WINDOW_VULKAN | SDL_WINDOW_ALLOW_HIGHDPI);
+    window = SDL_CreateWindow("Vulkan", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN | SDL_WINDOW_ALLOW_HIGHDPI);
     if (!window) {
         sdl_fail();
     }
@@ -49,9 +49,12 @@ std::pair<int, int> SDLWindow::get_drawable_size() const {
     return {width, height};
 }
 
+#include <iostream>
+
 void SDLWindow::wait_window_show_event() {
     SDL_Event event;
-    while (SDL_WaitEvent(&event)) {
+    // while (SDL_WaitEvent(&event)) {
+    while (SDL_WaitEventTimeout(&event, 500)) {
         switch (event.type) {
         case SDL_QUIT:
             throw quit_exception();
@@ -59,6 +62,7 @@ void SDLWindow::wait_window_show_event() {
             switch (event.window.event) {
             case SDL_WINDOWEVENT_EXPOSED:
             case SDL_WINDOWEVENT_SIZE_CHANGED:
+                std::cout << "SDL_WINDOWEVENT\n";
                 return;
             }
         }
@@ -82,6 +86,8 @@ bool SDLWindow::pool() {
             }
         }
     } while (SDL_PollEvent(&event));
+    std::cout << "Event - needs_redraw = " << needs_redraw << "\n";
+    return true;
     return needs_redraw;
 }
 

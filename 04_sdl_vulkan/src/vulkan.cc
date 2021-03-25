@@ -2,6 +2,8 @@
 
 #include <iostream>
 
+#define watch(x) std::cout << #x << " = " << (x) << "\n"
+
 const auto APPLICATION_NAME = "Vulkan demo";
 const auto SWAPCHAIN_EXTENSION = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
 
@@ -19,12 +21,12 @@ bool required_extensions_supported(const vk::PhysicalDevice device) {
 }
 }
 
-Vulkan::Vulkan(const std::vector<const char*>& required_extensions, const std::function<std::pair<int, int>()>& get_extent, const std::function<void()>& wait_window_show_event) :
-    instance_(create_instance(required_extensions)), get_extent_(get_extent), wait_window_show_event_(wait_window_show_event) {}
+Vulkan::Vulkan(const std::vector<const char*>& required_extensions, std::function<std::pair<int, int>()>  get_extent, std::function<void()>  wait_window_show_event) :
+    instance_(create_instance(required_extensions)), get_extent_(std::move(get_extent)), wait_window_show_event_(std::move(wait_window_show_event)) {}
 
 vk::UniqueInstance Vulkan::create_instance(const std::vector<const char*>& required_extensions) {
     print_extensions();
-    const vk::ApplicationInfo application_info(APPLICATION_NAME, VK_MAKE_VERSION(1, 0, 0), nullptr, 0, VK_API_VERSION_1_1);
+    const vk::ApplicationInfo application_info(APPLICATION_NAME, VK_MAKE_VERSION(1, 2, 0), nullptr, 0, VK_API_VERSION_1_1);
     const vk::InstanceCreateInfo create_info(vk::InstanceCreateFlags(), &application_info, 0, nullptr, static_cast<uint32_t>(required_extensions.size()), required_extensions.data());
     return vk::createInstanceUnique(create_info);
 }
@@ -179,6 +181,7 @@ vk::UniqueShaderModule Vulkan::create_shader_module(const uint32_t *spirv, size_
 
 // TODO remove hardcoded shaders
 #include <cstdint>
+#include <utility>
 #include "shader.frag.h"
 #include "shader.vert.h"
 
@@ -205,12 +208,7 @@ void Vulkan::create_pipeline() {
     pipeline_layout_ = device_->createPipelineLayoutUnique(pipeline_layout_info);
 
     vk::GraphicsPipelineCreateInfo pipeline_create_info({}, 2, stages_create_info, &vertex_input_info, &input_assembly, {}, &viewport_state, &rasterizer, &multisampling, {}, &color_blend_create_info, {}, *pipeline_layout_, *render_pass_);
-    auto pipeline_result_value = device_->createGraphicsPipelinesUnique(nullptr, pipeline_create_info);
-    // if (pipeline_result_value.result != vk::Result::eSuccess) {
-    //     // TODO proper error handling
-    //     throw std::runtime_error("Failed to create pipeline");
-    // }
-    graphics_pipeline_ = std::move(pipeline_result_value[0]);
+    graphics_pipeline_ = device_->createGraphicsPipelineUnique(nullptr, pipeline_create_info).value;
 }
 
 void Vulkan::create_framebuffers() {
@@ -264,8 +262,10 @@ void Vulkan::draw_frame() {
         const auto present_result = present_queue_.presentKHR(present_info);
         swapchain_outdated = image_index.result == vk::Result::eSuboptimalKHR || present_result == vk::Result::eSuboptimalKHR;
     } catch (const vk::OutOfDateKHRError& e) {
+        // image_available_semaphore_->
         swapchain_outdated = true;
     }
+    watch(swapchain_outdated);
     if (swapchain_outdated)
         recreate_swapchain();
 }

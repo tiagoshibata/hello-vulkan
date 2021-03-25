@@ -5,8 +5,8 @@
 
 class Vulkan {
 public:
-    Vulkan(const std::vector<const char*>& required_extensions, const std::function<std::pair<int, int>()>& get_extent, const std::function<void()>& wait_window_show_event);
-    VkInstance get_instance() const { return instance_.get(); };
+    Vulkan(const std::vector<const char*>& required_extensions, std::function<std::pair<int, int>()>  get_extent, std::function<void()>  wait_window_show_event);
+    [[nodiscard]] VkInstance get_instance() const { return instance_.get(); };
     void initialize(const VkSurfaceKHR surface);
     void draw_frame();
 
@@ -36,7 +36,7 @@ private:
     vk::UniqueInstance create_instance(const std::vector<const char*>& required_extensions);
     void choose_physical_device();
     bool is_device_suitable(const vk::PhysicalDevice device);
-    std::pair<int, int> get_graphics_and_present_queue_families(const vk::PhysicalDevice device) const;
+    [[nodiscard]] std::pair<int, int> get_graphics_and_present_queue_families(const vk::PhysicalDevice device) const;
     void create_logical_device();
     void recreate_swapchain();
     vk::SurfaceCapabilitiesKHR update_surface_capabilities();
