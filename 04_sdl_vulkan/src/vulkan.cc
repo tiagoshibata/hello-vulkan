@@ -1,5 +1,6 @@
-#include "vulkan.hh"
+#include"vulkan.hh"
 
+#include <glm/glm.hpp>
 #include <iostream>
 
 #define watch(x) std::cout << #x << " = " << (x) << "\n"
@@ -8,11 +9,33 @@ const auto APPLICATION_NAME = "Vulkan demo";
 const auto SWAPCHAIN_EXTENSION = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
 
 namespace {
-    void print_extensions() {
-        std::cout << "Available extensions:\n";
-        for (const auto& extension : vk::enumerateInstanceExtensionProperties())
-            std::cout << "\t" << extension.extensionName << "\n";
+struct Vertex {
+    glm::vec2 pos;
+    glm::vec3 color;
+
+    constexpr static auto get_binding_description() {
+        return vk::VertexInputBindingDescription(0, sizeof(Vertex));
     }
+
+    constexpr static auto get_attribute_descriptions() {
+        return std::array<vk::VertexInputAttributeDescription, 2> {
+                vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, pos)),
+                vk::VertexInputAttributeDescription(0, 1, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
+        };
+    }
+};
+
+const std::vector<Vertex> vertices = {
+        {{0.f, -.5f}, {1.f, 0.f, 0.f}},
+        {{.5f, .5f}, {0.f, 1.f, 0.f}},
+        {{-.5f, .5f}, {0.f, 0.f, 1.f}}
+};
+
+void print_extensions() {
+    std::cout << "Available extensions:\n";
+    for (const auto& extension : vk::enumerateInstanceExtensionProperties())
+        std::cout << "\t" << extension.extensionName << "\n";
+}
 
     bool required_extensions_supported(const vk::PhysicalDevice device) {
         const auto extensions = device.enumerateDeviceExtensionProperties();
@@ -192,7 +215,10 @@ void Vulkan::create_pipeline() {
     vk::PipelineShaderStageCreateInfo vertex_create_info({}, vk::ShaderStageFlagBits::eVertex, *vertex_shader, "main");
     vk::PipelineShaderStageCreateInfo fragment_create_info({}, vk::ShaderStageFlagBits::eFragment, *fragment_shader, "main");
     vk::PipelineShaderStageCreateInfo stages_create_info[] = {vertex_create_info, fragment_create_info};
-    vk::PipelineVertexInputStateCreateInfo vertex_input_info;
+
+    const auto binding_description = Vertex::get_binding_description();
+    const auto attribute_descriptions = Vertex::get_attribute_descriptions();
+    vk::PipelineVertexInputStateCreateInfo vertex_input_info({}, 1, &binding_description, attribute_descriptions.size(), attribute_descriptions.data());
 
     vk::PipelineInputAssemblyStateCreateInfo input_assembly({}, vk::PrimitiveTopology::eTriangleList);
 
